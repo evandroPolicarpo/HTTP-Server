@@ -269,6 +269,49 @@ int http_parser_method(const char *req, int *index, char *method){
     return (state == Q_URL) ? 0 : -1;
 }
 
+int http_parser_url(const char *req, int *index, char *url){
+    AFD_STATE state = Q_URL;
+    int start_index = *index;
+    int i = *index;
+    unsigned char c;
+
+    while((c = (unsigned char)req[i]) != '\0' && state != Q_ERROR && state != Q_VERSION){
+        switch (state)
+        {
+        case Q_URL:
+            if(c == ' '){
+                int url_len = i - start_index;
+
+                strncpy(url, &req[start_index], url_len);
+                url[url_len] = '\0';
+                state = Q_VERSION;
+                *index = i + 1;
+            } else if(c >= 0x20 && c <= 0x7E){
+                state = Q_URL;
+            } else {
+                state = Q_ERROR;
+            }
+            break;
+
+        case Q_ERROR:
+            break;
+
+        default:
+            state = Q_ERROR;
+            break;
+        }
+        i++;
+    }
+    return (state == Q_VERSION) ? 0 : -1;
+}
+
+int http_parser_version(const char *req, int *index, char *url){
+    AFD_STATE state = Q_VERSION;
+    int start_index = *index;
+    int i = *index;
+    unsigned char c;
+}
+
 int http_parser(const char *req){
     //...
     return 0;
