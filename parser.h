@@ -19,6 +19,7 @@ typedef enum {
     Q_METHOD,       //Entry Point
     Q_METHOD_END,   //Accept State
     Q_URL,          //URL State
+    Q_VERSION,      //
     Q_ERROR,        //Refuse State
 
     //CONNECT Methods
@@ -78,10 +79,22 @@ typedef enum {
     Q_METHOD_TRACE_1,
     Q_METHOD_TRACE_2,
     Q_METHOD_TRACE_3,
-    Q_METHOD_TRACE_4
+    Q_METHOD_TRACE_4,
+
+    //Version
+    Q_VERSION_T1,
+    Q_VERSION_T2,
+    Q_VERSION_P,
+    Q_VERSION_SLASH,
+    Q_VERSION_DIGIT_1,
+    Q_VERSION_DIGIT_2,
+    Q_VERSION_CR, //Carriage Return
+    Q_VERSION_END //New Line
+
 } AFD_STATE;
 
 int http_parser_method(const char *req, int *index, char *method);
+int http_parser_url(const char *req, int *index, char *url);
 int http_parser(const char *req);
 
 #endif /* PARSER_H */
