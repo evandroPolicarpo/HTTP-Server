@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "parser.h"
 
@@ -305,11 +306,91 @@ int http_parser_url(const char *req, int *index, char *url){
     return (state == Q_VERSION) ? 0 : -1;
 }
 
-int http_parser_version(const char *req, int *index, char *url){
+int http_parser_version(const char *req, int *index, char *version){
     AFD_STATE state = Q_VERSION;
     int start_index = *index;
     int i = *index;
     unsigned char c;
+
+    while((c = (unsigned char)req[i]) != '\0' && state != Q_ERROR && state != Q_VERSION_END){
+        switch (state)
+        {
+        case Q_VERSION:
+            if(c == 'H'){
+                state = Q_VERSION_T1;
+            } else state = Q_ERROR;
+            break;
+
+        case Q_VERSION_T1:
+            if(c == 'T'){
+                state = Q_VERSION_T2;
+            } else state = Q_ERROR;
+            break;
+
+        case Q_VERSION_T2:
+            if(c == 'T'){
+                state = Q_VERSION_P;
+            } else state = Q_ERROR;
+            break;
+
+        case Q_VERSION_P:
+            if(c == 'P'){
+                state = Q_VERSION_SLASH;
+            } else state = Q_ERROR;
+            break;
+
+        case Q_VERSION_SLASH:
+            if(c == '/'){
+                state = Q_VERSION_DIGIT_1;
+            } else state = Q_ERROR;
+            break;
+
+        case Q_VERSION_DIGIT_1:
+            if(isdigit(c)){
+                state = Q_VERSION_DOT;
+            } else state = Q_ERROR;
+            break;
+
+        case Q_VERSION_DOT:
+            if(c == '.'){
+                state = Q_VERSION_DIGIT_2;
+            } else state = Q_ERROR;
+            break;
+
+        case Q_VERSION_DIGIT_2:
+            if(isdigit(c)){
+                state = Q_VERSION_CR;
+            } else state = Q_ERROR;
+            break;
+
+        case Q_VERSION_CR:
+            if(c == '\r'){
+                state = Q_VERSION_LF;
+            } else state = Q_ERROR;
+            break;
+
+        case Q_VERSION_LF:
+            if(c == '\n'){
+                state = Q_VERSION_END;
+            } else state = Q_ERROR;
+            break;
+
+        default:
+            state = Q_ERROR;
+            break;
+        }
+        i++;
+    }
+
+    if(state == Q_VERSION_END){
+        int version_len = (i - 2) - start_index; //exclui CR e LF
+
+        strncpy(version, &req[start_index], version_len);
+        version[version_len] = '\0';
+        *index = i;
+        return 0;
+    }
+    return -1;
 }
 
 int http_parser(const char *req){

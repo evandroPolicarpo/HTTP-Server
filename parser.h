@@ -87,14 +87,17 @@ typedef enum {
     Q_VERSION_P,
     Q_VERSION_SLASH,
     Q_VERSION_DIGIT_1,
+    Q_VERSION_DOT,
     Q_VERSION_DIGIT_2,
     Q_VERSION_CR, //Carriage Return
-    Q_VERSION_END //New Line
+    Q_VERSION_LF, //Line Feed
+    Q_VERSION_END //Accept State (after LF)
 
 } AFD_STATE;
 
 int http_parser_method(const char *req, int *index, char *method);
 int http_parser_url(const char *req, int *index, char *url);
+int http_parser_version(const char *req, int *index, char *version);
 int http_parser(const char *req);
 
 #endif /* PARSER_H */
