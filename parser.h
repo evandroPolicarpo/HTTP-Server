@@ -1,16 +1,15 @@
 #ifndef PARSER_H
 #define PARSER_H
 
+#include "http.h"
+
 /*
  * Parser de requisições HTTP.
  *
- * http_parser_method: consome o método HTTP a partir de req[*index] e, em caso
- *   de sucesso, grava o método em `method` (ex.: "GET") e avança *index até o
- *   início da URL, retornando 0. Retorna -1 caso o método seja inválido.
- *   O buffer `method` deve ter espaço para o maior método ("OPTIONS") mais o
- *   terminador nulo, ou seja, no mínimo 8 bytes.
- *
- * http_parser: ponto de entrada do parser da requisição completa.
+ * http_parser: ponto de entrada do parser da requisição completa. Inicializa
+ *   `msg`, preenche os componentes (método, URL, versão, headers e body) e
+ *   retorna 0 em caso de sucesso. Em caso de erro retorna -1 e libera os
+ *   componentes já alocados em `msg`.
  */
 
 /* Estados do autômato finito determinístico (AFD) usado no parsing. */
@@ -91,13 +90,16 @@ typedef enum {
     Q_VERSION_DIGIT_2,
     Q_VERSION_CR, //Carriage Return
     Q_VERSION_LF, //Line Feed
-    Q_VERSION_END //Accept State (after LF)
+    Q_VERSION_END, //Accept State (after LF)
+
+    //Headers
+    Q_HEADER,
+    Q_HEADER_VALUE,
+    Q_HEADER_LF,
+    Q_HEADER_END
 
 } AFD_STATE;
 
-int http_parser_method(const char *req, int *index, char *method);
-int http_parser_url(const char *req, int *index, char *url);
-int http_parser_version(const char *req, int *index, char *version);
-int http_parser(const char *req);
+int http_parser(const char *req, http_message_t *msg);
 
 #endif /* PARSER_H */
