@@ -45,6 +45,9 @@ void http_message_init(http_message_t *msg);
 /* Libera toda a memória alocada para a mensagem. */
 void http_message_free(http_message_t *msg);
 
+/* Imprime todos os componentes da mensagem de forma detalhada. */
+void http_message_print(const http_message_t *msg);
+
 /*
  * Adiciona um header ao dicionário, copiando nome e valor.
  * Retorna 0 em caso de sucesso e -1 em caso de erro de alocação.
