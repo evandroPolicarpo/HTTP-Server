@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -39,6 +40,39 @@ void http_message_free(http_message_t *msg){
     free(msg->body);
     msg->body = NULL;
     msg->body_len = 0;
+}
+
+void http_message_print(const http_message_t *msg){
+    size_t i;
+
+    if(msg == NULL){
+        printf("(mensagem nula)\n");
+        return;
+    }
+
+    printf("Método : %s\n", msg->method[0] != '\0' ? msg->method : "(vazio)");
+    printf("URL    : %s\n", msg->url[0] != '\0' ? msg->url : "(vazia)");
+    printf("Versão : %s\n", msg->version[0] != '\0' ? msg->version : "(vazia)");
+
+    printf("Headers (%zu):\n", msg->headers.count);
+    if(msg->headers.count == 0){
+        printf("  (nenhum)\n");
+    } else {
+        for(i = 0; i < msg->headers.count; i++){
+            printf("  %s: %s\n",
+                   msg->headers.items[i].name,
+                   msg->headers.items[i].value);
+        }
+    }
+
+    printf("Body (%zu bytes):\n", msg->body_len);
+    if(msg->body == NULL || msg->body_len == 0){
+        printf("  (vazio)\n");
+    } else {
+        printf("  ");
+        fwrite(msg->body, 1, msg->body_len, stdout);
+        if(msg->body[msg->body_len - 1] != '\n') printf("\n");
+    }
 }
 
 int http_headers_add(http_headers_t *headers, const char *name, const char *value){
