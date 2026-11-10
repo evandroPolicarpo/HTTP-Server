@@ -1,10 +1,11 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
 #include "parser.h"
 
-int http_parser_method(const char *req, int *index, char *method){
+static int http_parser_method(const char *req, int *index, http_message_t *msg){
     AFD_STATE state = Q_METHOD;
     int i = *index;
     char c;
@@ -61,7 +62,7 @@ int http_parser_method(const char *req, int *index, char *method){
             case Q_METHOD_CONNECT_6:
                 if(c == 'T'){
                     state = Q_METHOD_END;
-                    strcpy(method, "CONNECT");
+                    strcpy(msg->method, "CONNECT");
                 }
                 else state = Q_ERROR;
                 break;
@@ -90,7 +91,7 @@ int http_parser_method(const char *req, int *index, char *method){
             case Q_METHOD_DELETE_5:
                 if(c == 'E'){
                     state = Q_METHOD_END;
-                    strcpy(method, "DELETE");
+                    strcpy(msg->method, "DELETE");
                 }
                 else state = Q_ERROR;
                 break;
@@ -104,7 +105,7 @@ int http_parser_method(const char *req, int *index, char *method){
             case Q_METHOD_GET_2:
                 if(c == 'T'){
                     state = Q_METHOD_END;
-                    strcpy(method, "GET");
+                    strcpy(msg->method, "GET");
                 }
                 else state = Q_ERROR;
                 break;
@@ -123,7 +124,7 @@ int http_parser_method(const char *req, int *index, char *method){
             case Q_METHOD_HEAD_3:
                 if(c == 'D'){
                     state = Q_METHOD_END;
-                    strcpy(method, "HEAD");
+                    strcpy(msg->method, "HEAD");
                 }
                 else state = Q_ERROR;
                 break;
@@ -157,7 +158,7 @@ int http_parser_method(const char *req, int *index, char *method){
             case Q_METHOD_OPTIONS_6:
                 if(c == 'S'){
                     state = Q_METHOD_END;
-                    strcpy(method, "OPTIONS");
+                    strcpy(msg->method, "OPTIONS");
                 }
                 else state = Q_ERROR;
                 break;
@@ -176,7 +177,7 @@ int http_parser_method(const char *req, int *index, char *method){
             case Q_METHOD_PATCH_4:
                 if(c == 'H'){
                     state = Q_METHOD_END;
-                    strcpy(method, "PATCH");
+                    strcpy(msg->method, "PATCH");
                 }
                 else state = Q_ERROR;
                 break;
@@ -190,7 +191,7 @@ int http_parser_method(const char *req, int *index, char *method){
             case Q_METHOD_POST_3:
                 if(c == 'T'){
                     state = Q_METHOD_END;
-                    strcpy(method, "POST");
+                    strcpy(msg->method, "POST");
                 }
                 else state = Q_ERROR;
                 break;
@@ -199,7 +200,7 @@ int http_parser_method(const char *req, int *index, char *method){
             case Q_METHOD_PUT_2:
                 if(c == 'T'){
                     state = Q_METHOD_END;
-                    strcpy(method, "PUT");
+                    strcpy(msg->method, "PUT");
                 }
                 else state = Q_ERROR;
                 break;
@@ -223,7 +224,7 @@ int http_parser_method(const char *req, int *index, char *method){
             case Q_METHOD_QUERY_4:
                 if(c == 'Y'){
                     state = Q_METHOD_END;
-                    strcpy(method, "QUERY");
+                    strcpy(msg->method, "QUERY");
                 }
                 else state = Q_ERROR;
                 break;
@@ -247,7 +248,7 @@ int http_parser_method(const char *req, int *index, char *method){
             case Q_METHOD_TRACE_4:
                 if(c == 'E'){
                     state = Q_METHOD_END;
-                    strcpy(method, "TRACE");
+                    strcpy(msg->method, "TRACE");
                 }
                 else state = Q_ERROR;
                 break;
@@ -270,7 +271,7 @@ int http_parser_method(const char *req, int *index, char *method){
     return (state == Q_URL) ? 0 : -1;
 }
 
-int http_parser_url(const char *req, int *index, char *url){
+static int http_parser_url(const char *req, int *index, http_message_t *msg){
     AFD_STATE state = Q_URL;
     int start_index = *index;
     int i = *index;
@@ -283,8 +284,13 @@ int http_parser_url(const char *req, int *index, char *url){
             if(c == ' '){
                 int url_len = i - start_index;
 
-                strncpy(url, &req[start_index], url_len);
-                url[url_len] = '\0';
+                if(url_len <= 0 || url_len >= HTTP_URL_MAX){
+                    state = Q_ERROR;
+                    break;
+                }
+
+                memcpy(msg->url, &req[start_index], (size_t)url_len);
+                msg->url[url_len] = '\0';
                 state = Q_VERSION;
                 *index = i + 1;
             } else if(c >= 0x20 && c <= 0x7E){
@@ -306,7 +312,7 @@ int http_parser_url(const char *req, int *index, char *url){
     return (state == Q_VERSION) ? 0 : -1;
 }
 
-int http_parser_version(const char *req, int *index, char *version){
+static int http_parser_version(const char *req, int *index, http_message_t *msg){
     AFD_STATE state = Q_VERSION;
     int start_index = *index;
     int i = *index;
@@ -385,15 +391,145 @@ int http_parser_version(const char *req, int *index, char *version){
     if(state == Q_VERSION_END){
         int version_len = (i - 2) - start_index; //exclui CR e LF
 
-        strncpy(version, &req[start_index], version_len);
-        version[version_len] = '\0';
+        if(version_len <= 0 || version_len >= HTTP_VERSION_MAX) return -1;
+
+        memcpy(msg->version, &req[start_index], (size_t)version_len);
+        msg->version[version_len] = '\0';
         *index = i;
         return 0;
     }
     return -1;
 }
 
-int http_parser(const char *req){
-    //...
+/* Caracteres válidos em nomes de header (tchar, RFC 7230). */
+static int http_is_tchar(unsigned char c){
+    if(isalnum(c)) return 1;
+    return c != '\0' && strchr("!#$%&'*+-.^_`|~", c) != NULL;
+}
+
+/* Copia um par nome/valor delimitado por índices e o adiciona ao dicionário. */
+static int http_parser_add_header(http_message_t *msg,
+                                  const char *name, size_t name_len,
+                                  const char *value, size_t value_len){
+    char *name_copy;
+    char *value_copy;
+    int result;
+
+    name_copy = malloc(name_len + 1);
+    value_copy = malloc(value_len + 1);
+    if(name_copy == NULL || value_copy == NULL){
+        free(name_copy);
+        free(value_copy);
+        return -1;
+    }
+
+    memcpy(name_copy, name, name_len);
+    name_copy[name_len] = '\0';
+    memcpy(value_copy, value, value_len);
+    value_copy[value_len] = '\0';
+
+    result = http_headers_add(&msg->headers, name_copy, value_copy);
+
+    free(name_copy);
+    free(value_copy);
+    return result;
+}
+
+static int http_parser_headers(const char *req, int *index, http_message_t *msg){
+    int i = *index;
+
+    while(req[i] != '\0'){
+        int name_start;
+        int name_len;
+        int value_start;
+        int value_len;
+
+        /* Linha em branco: fim dos headers. */
+        if(req[i] == '\r'){
+            if(req[i + 1] != '\n') return -1;
+            *index = i + 2; //Primeiro byte do body
+            return 0;
+        }
+        if(req[i] == '\n') return -1; //CRLF obrigatório
+
+        name_start = i;
+        while(req[i] != '\0' && req[i] != ':'){
+            if(!http_is_tchar((unsigned char)req[i])) return -1;
+            i++;
+        }
+        if(req[i] != ':') return -1;
+
+        name_len = i - name_start;
+        if(name_len == 0) return -1;
+        i++;
+
+        /* Ignora espaços/tabs opcionais antes do valor. */
+        while(req[i] == ' ' || req[i] == '\t') i++;
+
+        value_start = i;
+        while(req[i] != '\0' && req[i] != '\r'){
+            if(req[i] == '\n') return -1; //LF sem CR
+            i++;
+        }
+        if(req[i] != '\r' || req[i + 1] != '\n') return -1;
+
+        value_len = i - value_start;
+        /* Remove espaços/tabs ao final do valor. */
+        while(value_len > 0 &&
+              (req[value_start + value_len - 1] == ' ' ||
+               req[value_start + value_len - 1] == '\t')){
+            value_len--;
+        }
+
+        if(http_parser_add_header(msg, &req[name_start], (size_t)name_len,
+                                  &req[value_start], (size_t)value_len) != 0){
+            return -1;
+        }
+
+        i += 2; //Pula CRLF
+    }
+
+    return -1; //Terminou o buffer antes da linha em branco
+}
+
+static int http_parser_body(const char *req, int *index, http_message_t *msg){
+    const char *content_length = http_headers_get(&msg->headers, "Content-Length");
+    size_t available = strlen(&req[*index]);
+    size_t body_len = available;
+
+    if(content_length != NULL){
+        char *end = NULL;
+        unsigned long long declared = strtoull(content_length, &end, 10);
+
+        if(end == content_length) return -1;
+
+        while(*end == ' ' || *end == '\t') end++;
+        if(*end != '\0') return -1;
+
+        if(declared > (unsigned long long)available) return -1;
+        body_len = (size_t)declared;
+    }
+
+    if(body_len == 0) return 0;
+    return http_message_set_body(msg, &req[*index], body_len);
+}
+
+int http_parser(const char *req, http_message_t *msg){
+    int index = 0;
+
+    if(req == NULL || msg == NULL) return -1;
+
+    http_message_init(msg);
+
+    if(http_parser_method(req, &index, msg) != 0) goto error;
+    if(http_parser_url(req, &index, msg) != 0) goto error;
+    if(http_parser_version(req, &index, msg) != 0) goto error;
+    if(http_parser_headers(req, &index, msg) != 0) goto error;
+    if(http_parser_body(req, &index, msg) != 0) goto error;
+
     return 0;
+
+error:
+    http_message_free(msg);
+    return -1;
 }
